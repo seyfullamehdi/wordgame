@@ -31,7 +31,6 @@
     padding:18px 14px 40px;
     -webkit-user-select:none;
     user-select:none;
-    touch-action:none;
   }
   .wrap{max-width:1000px;margin:0 auto;}
 
@@ -214,7 +213,7 @@
       <div class="brand-mark">W</div>
       <div>
         <h1>Word Menyu Oyunu</h1>
-        <p>1 dəqiqədə şəkilləri düzgün sekmenin xanasına yerləşdir</p>
+        <p>1 dəqiqədə şəkilləri düzgün tab-ın xanasına yerləşdir</p>
       </div>
     </div>
     <div class="stats">
@@ -224,7 +223,7 @@
     </div>
   </header>
 
-  <div class="msg" id="msg">Yuxarıdakı şəkillərdən birini tut, uyğun sekmenin xanasına burax. Yeni şəkil dərhal onun yerinə gələcək.</div>
+  <div class="msg" id="msg">Yuxarıdakı şəkillərdən birini tut, uyğun tab-ın xanasına burax. Yeni şəkil dərhal onun yerinə gələcək.</div>
 
   <div class="pool-label">Alət qrupları</div>
   <div class="pool" id="pool"></div>
@@ -473,7 +472,7 @@ function handleDrop(chip, zone){
     setTimeout(()=>chip.classList.remove('shake'), 400);
     zone.classList.add('wrong-flash');
     setTimeout(()=>zone.classList.remove('wrong-flash'), 350);
-    setMsg(`Səhv! "${chip.dataset.label}" ${zone.dataset.cat} sekmesinə aid deyil.`, 'lose');
+    setMsg(`Səhv! "${chip.dataset.label}" ${zone.dataset.cat} tab-ına aid deyil.`, 'lose');
   }
   updateStats();
   checkEnd();
@@ -486,7 +485,7 @@ function startGame(){
   buildQueue();
   buildPool();
   updateStats();
-  setMsg("Yuxarıdakı şəkillərdən birini tut, uyğun sekmenin xanasına burax. Yeni şəkil dərhal onun yerinə gələcək.");
+  setMsg("Yuxarıdakı şəkillərdən birini tut, uyğun tab-ın xanasına burax. Yeni şəkil dərhal onun yerinə gələcək.");
   timerId = setInterval(tick, 1000);
 }
 
