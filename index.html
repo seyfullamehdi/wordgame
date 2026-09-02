@@ -180,6 +180,8 @@
     border:1.5px solid var(--neutral);
     background:#fff;
     animation:pop .2s ease;
+    cursor:grab;
+    touch-action:none;
   }
   .cell.filled{
     border:1.5px solid var(--good);
@@ -327,7 +329,7 @@
     </div>
   </header>
 
-  <div class="msg" id="msg">Yuxarıdakı şəkillərdən birini tut, istədiyin tab-ın xanasına burax. Vaxt ilk yerləşdirmədən sonra başlayacaq.</div>
+  <div class="msg" id="msg">Yuxarıdakı şəkillərdən birini tut, istədiyin tab-ın xanasına burax. Yerləşdirdikdən sonra da sürüşdürüb yerini dəyişə bilərsən. Vaxt ilk yerləşdirmədən sonra başlayacaq.</div>
 
   <div class="pool-label">Alət qrupları</div>
   <div class="pool" id="pool"></div>
@@ -404,6 +406,7 @@ function buildZones(){
     for(let i=0;i<cat.items.length;i++){
       const cell = document.createElement('div');
       cell.className = 'cell';
+      attachCellDrag(cell);
       body.appendChild(cell);
     }
     zone.appendChild(head);
@@ -414,8 +417,9 @@ function buildZones(){
 
 function buildQueue(){
   let all = [];
+  let idc = 0;
   DATA.forEach(cat=>{
-    cat.items.forEach(it=>all.push({...it, cat: cat.cat}));
+    cat.items.forEach(it=>all.push({...it, cat: cat.cat, id: idc++}));
   });
   queue = shuffle(all);
 }
@@ -442,6 +446,7 @@ function renderSlot(idx){
   chip.className = 'chip';
   chip.dataset.cat = item.cat;
   chip.dataset.label = item.label;
+  chip.dataset.itemId = item.id;
   chip.dataset.slot = idx;
   chip.innerHTML = `<img src="${item.src}" alt="${item.label}">`;
   slotEl.appendChild(chip);
@@ -591,16 +596,133 @@ function attachDrag(chip){
   });
 }
 
-function handleDrop(chip, zone){
-  const slotIdx = parseInt(chip.dataset.slot, 10);
-  const correct = chip.dataset.cat === zone.dataset.cat;
+function updateZoneCount(zone){
   const body = zone.querySelector('[data-body]');
   const countEl = zone.querySelector('[data-count]');
+  const filledNow = body.querySelectorAll('.cell.occupied').length;
+  const catData = DATA.find(c=>c.cat===zone.dataset.cat);
+  countEl.textContent = `${filledNow}/${catData.items.length}`;
+}
 
-  const slotIdx0 = parseInt(chip.dataset.slot, 10);
+function occupyCell(cell, zone, itemData){
+  const correct = itemData.cat === zone.dataset.cat;
+  cell.innerHTML = '';
+  const img = document.createElement('img');
+  img.src = itemData.src;
+  img.alt = itemData.label;
+  cell.appendChild(img);
+  cell.title = itemData.label;
+  cell.dataset.correct = correct ? '1' : '0';
+  cell.dataset.itemId = itemData.id;
+  cell.dataset.trueCat = itemData.cat;
+  cell.dataset.label = itemData.label;
+  cell.dataset.src = itemData.src;
+  cell.classList.add('occupied');
+
+  if(correct){
+    score++;
+  } else {
+    wrongCount++;
+    mistakes.push({itemId:itemData.id, label:itemData.label, trueCat:itemData.cat, src:itemData.src});
+  }
+  updateZoneCount(zone);
+  return correct;
+}
+
+function vacateCell(cell){
+  const zone = cell.closest('.zone');
+  const itemData = {
+    id: cell.dataset.itemId,
+    label: cell.dataset.label,
+    src: cell.dataset.src,
+    cat: cell.dataset.trueCat,
+  };
+  const wasCorrect = cell.dataset.correct === '1';
+  if(wasCorrect){
+    score--;
+  } else {
+    wrongCount--;
+    mistakes = mistakes.filter(m => String(m.itemId) !== String(itemData.id));
+  }
+  cell.innerHTML = '';
+  cell.classList.remove('occupied');
+  delete cell.dataset.correct;
+  delete cell.dataset.itemId;
+  delete cell.dataset.trueCat;
+  delete cell.dataset.label;
+  delete cell.dataset.src;
+  cell.title = '';
+  updateZoneCount(zone);
+  return itemData;
+}
+
+function attachCellDrag(cell){
+  cell.addEventListener('pointerdown', (e)=>{
+    if(gameOver) return;
+    if(!cell.classList.contains('occupied')) return;
+    const rect = cell.getBoundingClientRect();
+    const originZone = cell.closest('.zone');
+    const itemData = vacateCell(cell);
+    updateStats();
+
+    const ghost = document.createElement('div');
+    ghost.className = 'chip dragging';
+    ghost.style.left = rect.left+'px';
+    ghost.style.top = rect.top+'px';
+    ghost.style.width = rect.width+'px';
+    ghost.style.height = rect.height+'px';
+    ghost.innerHTML = `<img src="${itemData.src}" alt="${itemData.label}">`;
+    document.body.appendChild(ghost);
+
+    const offX = e.clientX - rect.left;
+    const offY = e.clientY - rect.top;
+
+    function onMove(ev){
+      ghost.style.left = (ev.clientX - offX)+'px';
+      ghost.style.top = (ev.clientY - offY)+'px';
+      document.querySelectorAll('.zone').forEach(z=>z.classList.remove('hover'));
+      ghost.style.pointerEvents = 'none';
+      const under = document.elementFromPoint(ev.clientX, ev.clientY);
+      ghost.style.pointerEvents = '';
+      const z = under && under.closest ? under.closest('.zone') : null;
+      if(z) z.classList.add('hover');
+    }
+
+    function onUp(ev){
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.querySelectorAll('.zone').forEach(z=>z.classList.remove('hover'));
+      ghost.style.pointerEvents = 'none';
+      const under = document.elementFromPoint(ev.clientX, ev.clientY);
+      ghost.remove();
+      const z = under && under.closest ? under.closest('.zone') : null;
+
+      let targetCell = null;
+      if(z){
+        const body = z.querySelector('[data-body]');
+        targetCell = Array.from(body.querySelectorAll('.cell:not(.occupied)'))[0];
+      }
+      if(z && targetCell){
+        occupyCell(targetCell, z, itemData);
+        setMsg(`"${itemData.label}" ${z.dataset.cat} tab-ına köçürüldü.`);
+      } else {
+        occupyCell(cell, originZone, itemData);
+      }
+      updateStats();
+    }
+
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  });
+}
+
+function handleDrop(chip, zone){
+  const slotIdx = parseInt(chip.dataset.slot, 10);
+  const body = zone.querySelector('[data-body]');
   const targetCell = Array.from(body.querySelectorAll('.cell:not(.occupied)'))[0];
+
   if(!targetCell){
-    poolEl.children[slotIdx0].appendChild(chip);
+    poolEl.children[slotIdx].appendChild(chip);
     chip.classList.add('shake');
     setTimeout(()=>chip.classList.remove('shake'), 400);
     setMsg(`Bu tab-ın bütün xanaları doludur, başqa xana seç.`);
@@ -612,30 +734,18 @@ function handleDrop(chip, zone){
     timerId = setInterval(tick, 1000);
   }
 
-  targetCell.innerHTML = '';
-  const img = document.createElement('img');
-  img.src = chip.querySelector('img').src;
-  img.alt = chip.dataset.label;
-  targetCell.appendChild(img);
-  targetCell.title = chip.dataset.label;
-  targetCell.dataset.correct = correct ? '1' : '0';
-  targetCell.classList.add('occupied');
+  const itemData = {
+    id: chip.dataset.itemId,
+    label: chip.dataset.label,
+    src: chip.querySelector('img').src,
+    cat: chip.dataset.cat,
+  };
+  occupyCell(targetCell, zone, itemData);
   chip.remove();
 
   attemptedCount++;
-  const filledNow = body.querySelectorAll('.cell.occupied').length;
-  const catData = DATA.find(c=>c.cat===zone.dataset.cat);
-  countEl.textContent = `${filledNow}/${catData.items.length}`;
-
-  if(correct){
-    score++;
-    placedCount++;
-    setMsg(`"${chip.dataset.label}" yerləşdirildi.`);
-  } else {
-    wrongCount++;
-    mistakes.push({label: chip.dataset.label, trueCat: chip.dataset.cat, src: chip.querySelector('img').src});
-    setMsg(`"${chip.dataset.label}" yerləşdirildi.`);
-  }
+  placedCount++;
+  setMsg(`"${itemData.label}" yerləşdirildi. Sürüşdürüb yerini dəyişə bilərsən.`);
 
   fillSlot(slotIdx);
   updateStats();
@@ -651,7 +761,7 @@ function startGame(){
   buildQueue();
   buildPool();
   updateStats();
-  setMsg("Yuxarıdakı şəkillərdən birini tut, istədiyin tab-ın xanasına burax. Vaxt ilk yerləşdirmədən sonra başlayacaq.");
+  setMsg("Yuxarıdakı şəkillərdən birini tut, istədiyin tab-ın xanasına burax. Yerləşdirdikdən sonra da sürüşdürüb yerini dəyişə bilərsən. Vaxt ilk yerləşdirmədən sonra başlayacaq.");
 }
 
 resetBtn.addEventListener('click', startGame);
